@@ -99,8 +99,11 @@ class RecordAudio:
         try:
             for chunk in chunks:
                 if request.live and self._live_recognizer:
-                    recognition = self._live_recognizer.transcribe(io.BytesIO(chunk), None, None)
-                    text = " ".join(s.text.strip() for s in recognition.segments)
+                    try:
+                        recognition = self._live_recognizer.transcribe(io.BytesIO(chunk), None, None)
+                        text = " ".join(s.text.strip() for s in recognition.segments)
+                    except Exception as error:  # chép nháp chỉ là phụ, không được làm dừng bản thu
+                        text = f"[Bỏ qua một khúc chép nháp: {error}]"
                     if text:
                         on_text(text)
         except KeyboardInterrupt:

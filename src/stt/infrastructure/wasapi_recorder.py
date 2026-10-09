@@ -47,6 +47,7 @@ class WasapiRecorder:
             chunk_size = CHUNK_SECONDS * rate * channels * width
             lock = threading.Lock()
             pending = bytearray()
+            failure: list[Exception] = []
 
             with wave.open(str(output_path), "wb") as wav:
                 wav.setnchannels(channels)
@@ -54,9 +55,13 @@ class WasapiRecorder:
                 wav.setframerate(rate)
 
                 def on_audio(data, frame_count, time_info, status):
-                    with lock:
-                        wav.writeframes(data)  # cập nhật header mỗi lần, file vẫn mở được nếu chết giữa chừng
-                        pending.extend(data)
+                    try:
+                        with lock:
+                            wav.writeframes(data)  # cập nhật header mỗi lần, file vẫn mở được nếu chết giữa chừng
+                            pending.extend(data)
+                    except Exception as error:
+                        failure.append(error)
+                        return (None, pyaudio.paAbort)
                     return (None, pyaudio.paContinue)
 
                 try:
@@ -73,6 +78,12 @@ class WasapiRecorder:
                 try:
                     while True:
                         time.sleep(0.2)
+                        if failure:
+                            raise SttError(f"Luồng thu âm đã dừng vì lỗi: {failure[0]}")
+                        if not stream.is_active():
+                            raise SttError(
+                                "Luồng thu âm đã dừng. Thiết bị phát âm thanh có thể đã bị đổi hoặc ngắt kết nối."
+                            )
                         with lock:
                             if len(pending) < chunk_size:
                                 continue

@@ -216,3 +216,49 @@ def test_record_refuses_to_overwrite_existing_audio(tmp_path):
 def test_record_rejects_names_that_are_not_plain_folder_names(tmp_path, name):
     with pytest.raises(SttError):
         RecordAudio(FakeRecorder([])).execute(RecordRequest(name, tmp_path))
+
+
+class FlakyRecognizer:
+    model_name = "fake"
+
+    def __init__(self):
+        self.calls = 0
+
+    def transcribe(self, source, language, prompt):
+        self.calls += 1
+        if self.calls == 1:
+            raise RuntimeError("boom")
+        return Recognition("en", 1.0, iter([seg(0, 1, " hello "), seg(1, 2, "world")]))
+
+
+def test_record_live_failure_on_one_chunk_does_not_stop_recording(tmp_path):
+    recorder = FakeRecorder([b"chunk1", b"chunk2"])
+    heard = []
+    RecordAudio(recorder, FlakyRecognizer()).execute(
+        RecordRequest("demo", tmp_path, live=True), heard.append
+    )
+
+    assert heard == ["[Bỏ qua một khúc chép nháp: boom]", "hello world"]
+    assert recorder.closed
+
+
+class DyingRecorder:
+    def __init__(self):
+        self.closed = False
+
+    def record(self, output_path):
+        try:
+            output_path.write_bytes(b"RIFF")
+            yield b"chunk"
+            raise SttError("stream died")
+        finally:
+            self.closed = True
+
+
+def test_record_propagates_recorder_failure_and_closes_it(tmp_path):
+    recorder = DyingRecorder()
+    with pytest.raises(SttError):
+        RecordAudio(recorder).execute(RecordRequest("demo", tmp_path))
+
+    assert recorder.closed
+    assert list(tmp_path.glob("*-demo/audio.wav"))
