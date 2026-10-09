@@ -1,8 +1,10 @@
+import io
+
 import pytest
 
-from stt.application.dto import CleanRequest, TranscribeRequest
+from stt.application.dto import CleanRequest, RecordRequest, TranscribeRequest
 from stt.application.ports import Recognition, SttError
-from stt.application.use_cases import CleanTranscript, TranscribeMedia
+from stt.application.use_cases import CleanTranscript, RecordAudio, TranscribeMedia
 from stt.domain.entities import Paragraph, Segment, TranscriptMeta
 from stt.infrastructure.jsonl_store import JsonlStore
 from stt.infrastructure.markdown_writer import MarkdownWriter
@@ -154,3 +156,63 @@ def test_markdown_format_with_vietnamese_and_awkward_filename(tmp_path):
         "\n"
         "[01:01:01] Hẹn gặp lại.\n"
     )
+
+
+class FakeRecorder:
+    def __init__(self, chunks, interrupt=True):
+        self.chunks = chunks
+        self.interrupt = interrupt
+        self.closed = False
+
+    def record(self, output_path):
+        try:
+            output_path.write_bytes(b"RIFF")
+            yield from self.chunks
+            if self.interrupt:
+                raise KeyboardInterrupt
+        finally:
+            self.closed = True
+
+
+def test_record_stops_cleanly_on_ctrl_c(tmp_path):
+    recorder = FakeRecorder([b"a", b"b"])
+    result = RecordAudio(recorder).execute(RecordRequest("standup", tmp_path))
+
+    assert result.audio_path.read_bytes() == b"RIFF"
+    assert result.audio_path.name == "audio.wav"
+    assert result.audio_path.parent.parent == tmp_path
+    assert result.audio_path.parent.name.endswith("-standup")
+    assert result.seconds >= 0
+    assert recorder.closed
+
+
+def test_record_live_sends_each_chunk_text_to_callback(tmp_path):
+    recognizer = FakeRecognizer([seg(0, 1, " hello "), seg(1, 2, "world")])
+    heard = []
+    RecordAudio(FakeRecorder([b"chunk1", b"chunk2"]), recognizer).execute(
+        RecordRequest("demo", tmp_path, live=True), heard.append
+    )
+
+    assert heard == ["hello world", "hello world"]
+    assert [source.read() for source in recognizer.sources] == [b"chunk1", b"chunk2"]
+    assert all(isinstance(source, io.BytesIO) for source in recognizer.sources)
+
+
+def test_record_without_live_does_not_transcribe(tmp_path):
+    recognizer = FakeRecognizer([seg(0, 1, "x")])
+    RecordAudio(FakeRecorder([b"chunk"]), recognizer).execute(RecordRequest("demo", tmp_path))
+    assert recognizer.sources == []
+
+
+def test_record_refuses_to_overwrite_existing_audio(tmp_path):
+    RecordAudio(FakeRecorder([])).execute(RecordRequest("standup", tmp_path))
+    second = FakeRecorder([])
+    with pytest.raises(SttError):
+        RecordAudio(second).execute(RecordRequest("standup", tmp_path))
+    assert not second.closed
+
+
+@pytest.mark.parametrize("name", ["", "..", "a/b", "a\\b"])
+def test_record_rejects_names_that_are_not_plain_folder_names(tmp_path, name):
+    with pytest.raises(SttError):
+        RecordAudio(FakeRecorder([])).execute(RecordRequest(name, tmp_path))

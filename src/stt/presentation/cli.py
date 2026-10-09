@@ -4,9 +4,9 @@ import time
 from datetime import date
 from pathlib import Path
 
-from stt.application.dto import CleanRequest, TranscribeRequest
+from stt.application.dto import CleanRequest, RecordRequest, TranscribeRequest
 from stt.application.ports import SttError
-from stt.application.use_cases import CleanTranscript, TranscribeMedia
+from stt.application.use_cases import CleanTranscript, RecordAudio, TranscribeMedia
 from stt.infrastructure.jsonl_store import JsonlStore
 from stt.infrastructure.markdown_writer import MarkdownWriter
 
@@ -45,6 +45,19 @@ def _clean(raw_path: Path) -> None:
     print(f"Giữ {result.kept} đoạn, bỏ {result.dropped} đoạn. Transcript: {result.transcript_path}")
 
 
+def _record(args: argparse.Namespace) -> None:
+    from stt.infrastructure.wasapi_recorder import WasapiRecorder
+    from stt.infrastructure.whisper_recognizer import WhisperRecognizer
+
+    live = WhisperRecognizer("small") if args.live else None
+    print("Đang thu âm thanh máy tính. Nhấn Ctrl+C để dừng.")
+    result = RecordAudio(WasapiRecorder(), live).execute(
+        RecordRequest(args.name, OUT_ROOT, args.live), print
+    )
+    print(f"\nĐã thu {result.seconds:.0f} giây vào {result.audio_path}")
+    print(f"Chép lời bằng: stt run \"{result.audio_path}\"")
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="stt", description="Chép lời âm thanh máy tính hoặc video, chạy local.")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -60,6 +73,9 @@ def _build_parser() -> argparse.ArgumentParser:
     add_source_command("run", "chép lời rồi làm sạch")
     clean = commands.add_parser("clean", help="làm sạch raw.jsonl thành transcript.md")
     clean.add_argument("raw", type=Path)
+    record = commands.add_parser("record", help="thu âm thanh máy tính, Ctrl+C để dừng")
+    record.add_argument("name", help="tên buổi ghi, dùng làm tên thư mục")
+    record.add_argument("--live", action="store_true", help="in bản chép nháp trong lúc thu")
     return parser
 
 
@@ -68,7 +84,9 @@ def main(argv: list[str] | None = None) -> int:
         stream.reconfigure(encoding="utf-8", errors="replace")
     args = _build_parser().parse_args(argv)
     try:
-        if args.command == "clean":
+        if args.command == "record":
+            _record(args)
+        elif args.command == "clean":
             _clean(args.raw)
         else:
             raw_path = _transcribe(args)
