@@ -35,7 +35,7 @@ class JsonlStore:
         segments: list[Segment] = []
         complete = False
         try:
-            with path.open(encoding="utf-8") as file:
+            with path.open(encoding="utf-8", errors="replace") as file:
                 for line in file:
                     try:
                         row = json.loads(line)
@@ -48,7 +48,7 @@ class JsonlStore:
                         segments.append(Segment(**row))
                     elif kind == "end":
                         complete = True
-        except (TypeError, AttributeError, UnicodeDecodeError) as error:
+        except (TypeError, AttributeError) as error:
             raise SttError(f"{path} không đúng định dạng raw.jsonl: {error}") from error
         if meta is None:
             raise SttError(f"{path} không đúng định dạng raw.jsonl: thiếu dòng meta")

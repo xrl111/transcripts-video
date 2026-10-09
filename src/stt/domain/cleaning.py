@@ -28,6 +28,7 @@ def filter_segments(segments: Iterable[Segment], rules: CleaningRules) -> list[S
         if not text or not _is_speech(segment, rules):
             continue
         if kept and kept[-1].text.casefold() == text.casefold():
+            kept[-1] = replace(kept[-1], end=segment.end)
             continue
         kept.append(replace(segment, text=text))
     return kept

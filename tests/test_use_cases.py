@@ -128,6 +128,20 @@ def test_clean_handles_interrupted_file_with_truncated_last_line(tmp_path):
     assert (result.kept, result.complete) == (1, False)
 
 
+def test_clean_handles_last_line_cut_inside_a_multibyte_character(tmp_path):
+    raw = tmp_path / "raw.jsonl"
+    writer = JsonlStore().open_writer(raw, META)
+    writer.write(seg(0, 2, "Kept."))
+    writer.close(False)
+    cut = '{"type": "segment", "start": 2.0, "end": 4.0, "text": "Xin chà'.encode("utf-8")[:-1]
+    with raw.open("ab") as file:
+        file.write(cut)
+
+    result = CleanTranscript(JsonlStore(), MarkdownWriter()).execute(CleanRequest(raw))
+
+    assert (result.kept, result.complete) == (1, False)
+
+
 def test_clean_missing_or_invalid_raw_is_user_error(tmp_path):
     use_case = CleanTranscript(JsonlStore(), MarkdownWriter())
     with pytest.raises(SttError):
@@ -212,7 +226,7 @@ def test_record_refuses_to_overwrite_existing_audio(tmp_path):
     assert not second.closed
 
 
-@pytest.mark.parametrize("name", ["", "..", "a/b", "a\\b"])
+@pytest.mark.parametrize("name", ["", "..", "a/b", "a\\b", "what?", "a:b"])
 def test_record_rejects_names_that_are_not_plain_folder_names(tmp_path, name):
     with pytest.raises(SttError):
         RecordAudio(FakeRecorder([])).execute(RecordRequest(name, tmp_path))

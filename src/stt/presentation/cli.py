@@ -47,9 +47,12 @@ def _clean(raw_path: Path) -> None:
 
 def _record(args: argparse.Namespace) -> None:
     from stt.infrastructure.wasapi_recorder import WasapiRecorder
-    from stt.infrastructure.whisper_recognizer import WhisperRecognizer
 
-    live = WhisperRecognizer("small") if args.live else None
+    live = None
+    if args.live:
+        from stt.infrastructure.whisper_recognizer import WhisperRecognizer
+
+        live = WhisperRecognizer("small")
     print("Đang thu âm thanh máy tính. Nhấn Ctrl+C để dừng.")
     result = RecordAudio(WasapiRecorder(), live).execute(
         RecordRequest(args.name, OUT_ROOT, args.live), print

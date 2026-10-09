@@ -76,3 +76,14 @@ def test_clean_filters_then_groups():
         seg(3, 5, "Let's begin."),
     ]
     assert clean(segments, RULES) == [Paragraph(0, "Welcome. Let's begin.")]
+
+
+def test_collapsed_duplicates_extend_the_kept_segment_end():
+    segments = [
+        seg(0, 2, "Thank you."),
+        seg(2, 4, "Thank you."),
+        seg(4, 6, "Thank you."),
+        seg(6.5, 8, "Moving on."),
+    ]
+    assert filter_segments(segments, RULES)[0].end == 6
+    assert clean(segments, RULES) == [Paragraph(0, "Thank you. Moving on.")]

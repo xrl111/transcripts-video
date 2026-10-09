@@ -86,13 +86,17 @@ class RecordAudio:
         self, request: RecordRequest, on_text: Callable[[str], None] = lambda text: None
     ) -> RecordResult:
         name = request.name
+        invalid_name = SttError(f"Tên buổi ghi không hợp lệ: {name!r}. Dùng tên thư mục đơn giản.")
         if not name or name in (".", "..") or PurePath(name).name != name or "\\" in name:
-            raise SttError(f"Tên buổi ghi không hợp lệ: {name!r}. Dùng tên thư mục đơn giản.")
+            raise invalid_name
         out_dir = request.out_root / f"{date.today().isoformat()}-{name}"
         audio_path = out_dir / "audio.wav"
         if audio_path.exists():
             raise SttError(f"{audio_path} đã tồn tại. Chọn tên khác để không ghi đè bản thu cũ.")
-        out_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            out_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as error:  # tên có ký tự Windows không cho phép, ví dụ ? : * | <>
+            raise invalid_name from error
 
         started = time.monotonic()
         chunks = self._recorder.record(audio_path)

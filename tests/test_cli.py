@@ -56,8 +56,7 @@ def test_run_with_no_speech(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr("stt.infrastructure.whisper_recognizer.WhisperRecognizer", FakeRecognizer)
 
     assert main(["run", str(source)]) == 0
-    assert (tmp_path / "out" / f"{TranscriptMeta('', '', 0, '', '').source}".split("/")[0] / "transcript.md").exists() or \
-           (tmp_path / "out").exists()
+    assert len(list(tmp_path.glob("out/*/transcript.md"))) == 1
 
     captured = capsys.readouterr()
     assert "Đã chép 0 đoạn" in captured.out

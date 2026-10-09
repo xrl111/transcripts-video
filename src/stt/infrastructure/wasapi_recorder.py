@@ -79,10 +79,13 @@ class WasapiRecorder:
                     while True:
                         time.sleep(0.2)
                         if failure:
-                            raise SttError(f"Luồng thu âm đã dừng vì lỗi: {failure[0]}")
+                            raise SttError(
+                                f"Luồng thu âm đã dừng vì lỗi: {failure[0]}. Phần đã thu được giữ tại {output_path}."
+                            )
                         if not stream.is_active():
                             raise SttError(
-                                "Luồng thu âm đã dừng. Thiết bị phát âm thanh có thể đã bị đổi hoặc ngắt kết nối."
+                                "Luồng thu âm đã dừng. Thiết bị phát âm thanh có thể đã bị đổi hoặc ngắt kết nối. "
+                                f"Phần đã thu được giữ tại {output_path}."
                             )
                         with lock:
                             if len(pending) < chunk_size:
