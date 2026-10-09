@@ -65,7 +65,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     for stream in (sys.stdout, sys.stderr):
-        stream.reconfigure(errors="replace")
+        stream.reconfigure(encoding="utf-8", errors="replace")
     args = _build_parser().parse_args(argv)
     try:
         if args.command == "clean":

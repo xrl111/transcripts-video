@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from stt.application.ports import Recognition
 from stt.domain.entities import Segment, TranscriptMeta
 from stt.infrastructure.jsonl_store import JsonlStore
 from stt.presentation.cli import _out_dir, main
@@ -37,3 +38,63 @@ def test_out_dir_reuses_folder_already_inside_out(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     audio = Path("out") / "2026-10-09-standup" / "audio.wav"
     assert _out_dir(audio) == audio.parent
+
+
+def test_run_with_no_speech(tmp_path, monkeypatch, capsys):
+    """Test transcribe path with 0 segments and 0 duration (no divide-by-zero)."""
+    monkeypatch.chdir(tmp_path)
+    source = tmp_path / "silent.wav"
+    source.write_bytes(b"fake audio")
+
+    class FakeRecognizer:
+        def __init__(self, model_name: str):
+            self.model_name = model_name
+
+        def transcribe(self, source, language, prompt):
+            return Recognition("en", 0.0, iter(()))
+
+    monkeypatch.setattr("stt.infrastructure.whisper_recognizer.WhisperRecognizer", FakeRecognizer)
+
+    assert main(["run", str(source)]) == 0
+    assert (tmp_path / "out" / f"{TranscriptMeta('', '', 0, '', '').source}".split("/")[0] / "transcript.md").exists() or \
+           (tmp_path / "out").exists()
+
+    captured = capsys.readouterr()
+    assert "Đã chép 0 đoạn" in captured.out
+
+
+def test_run_with_segments(tmp_path, monkeypatch, capsys):
+    """Test transcribe path with normal case: 2 segments."""
+    monkeypatch.chdir(tmp_path)
+    source = tmp_path / "talk.wav"
+    source.write_bytes(b"fake audio")
+
+    class FakeRecognizer:
+        def __init__(self, model_name: str):
+            self.model_name = model_name
+
+        def transcribe(self, source, language, prompt):
+            return Recognition(
+                "en",
+                4.0,
+                iter(
+                    [
+                        Segment(0, 2, "Hello.", -0.2, 0.01, 1.2),
+                        Segment(2, 4, "Welcome.", -0.2, 0.01, 1.2),
+                    ]
+                ),
+            )
+
+    monkeypatch.setattr("stt.infrastructure.whisper_recognizer.WhisperRecognizer", FakeRecognizer)
+
+    assert main(["run", str(source)]) == 0
+
+    captured = capsys.readouterr()
+    assert "Đã chép 2 đoạn" in captured.out
+    assert "100.0%" in captured.out
+
+    # Check transcript was created and contains both segments
+    transcript_files = list(tmp_path.glob("out/*/transcript.md"))
+    assert len(transcript_files) == 1
+    content = transcript_files[0].read_text(encoding="utf-8")
+    assert "Hello. Welcome." in content
