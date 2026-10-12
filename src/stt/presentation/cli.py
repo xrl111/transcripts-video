@@ -68,7 +68,7 @@ def _build_parser() -> argparse.ArgumentParser:
     def add_source_command(name: str, help_text: str) -> None:
         command = commands.add_parser(name, help=help_text)
         command.add_argument("file", type=Path, help="file wav hoặc video")
-        command.add_argument("--model", default="large-v3")
+        command.add_argument("--model", default="large-v3-turbo")
         command.add_argument("--language", choices=["en", "vi"], help="mặc định: tự nhận")
         command.add_argument("--prompt", help="tên riêng, thuật ngữ để model nghe đúng")
 
